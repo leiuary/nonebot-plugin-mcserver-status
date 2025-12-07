@@ -1,45 +1,96 @@
-from nonebot import logger, require
-from nonebot.plugin import PluginMetadata, inherit_supported_adapters
+from nonebot import on_command, get_plugin_config
+from nonebot.plugin import PluginMetadata
+from nonebot.adapters.onebot.v11 import MessageSegment
+from nonebot.exception import FinishedException
+from nonebot.params import CommandArg
+from nonebot.adapters import Message
+import asyncio
+import io
 
-require("nonebot_plugin_uninfo")
-require("nonebot_plugin_alconna")
-require("nonebot_plugin_localstore")
-require("nonebot_plugin_apscheduler")
 from .config import Config
+from .checker import generate_mcmotd_image, generate_single_server_image
 
 __plugin_meta__ = PluginMetadata(
-    name="名称",
-    description="描述",
-    usage="用法",
-    type="application",  # library
+    name="Minecraft Server Status",
+    description="一款原版风格、美观高效的 Minecraft 服务器状态查询插件",
+    usage="指令: " \
+    "查服" \
+    "查服 [IP/别名]",
+    type="application",
     homepage="https://github.com/leiuary/nonebot-plugin-mcserver-status",
+    supported_adapters={"nonebot.adapters.onebot.v11"},
     config=Config,
-    supported_adapters=inherit_supported_adapters(
-        "nonebot_plugin_alconna", "nonebot_plugin_uninfo"
-    ),
-    # supported_adapters={"~onebot.v11"}, # 仅 onebot
-    extra={"author": "leiuary <your@mail.com>"},
 )
 
-from arclet.alconna import Args, Option, Alconna, Arparma, Subcommand
-from nonebot_plugin_alconna import on_alconna
-from nonebot_plugin_alconna.uniseg import UniMessage
+# Load configuration
+plugin_config = get_plugin_config(Config)
 
-pip = on_alconna(
-    Alconna(
-        "pip",
-        Subcommand(
-            "install",
-            Args["package", str],
-            Option("-r|--requirement", Args["file", str]),
-            Option("-i|--index-url", Args["url", str]),
-        ),
-    )
-)
+# Determine command name and aliases
+triggers = plugin_config.mcmotd_command_triggers
+cmd_name = triggers[0] if triggers else "查服"
+cmd_aliases = set(triggers[1:]) if len(triggers) > 1 else set()
 
+# Define command
+mcmotd = on_command(cmd_name, aliases=cmd_aliases, priority=5, block=True)
 
-@pip.handle()
-async def _(result: Arparma):
-    package: str = result.other_args["package"]
-    logger.info(f"installing {package}")
-    await UniMessage.text(package).send()
+@mcmotd.handle()
+async def handle_mcmotd(args: Message = CommandArg()):
+    arg_text = args.extract_plain_text().strip()
+    
+    if arg_text:
+        # Single server query
+        target_address = arg_text
+        # Check if it matches an alias
+        for server in plugin_config.mcmotd_server_list:
+            if server.alias == arg_text:
+                target_address = server.address
+                break
+        
+        await mcmotd.send(f"正在查询服务器 {target_address}，请稍候...")
+        
+        try:
+            image = await asyncio.to_thread(generate_single_server_image, target_address, plugin_config)
+            
+            if image:
+                img_byte_arr = io.BytesIO()
+                image.save(img_byte_arr, format='PNG')
+                img_bytes = img_byte_arr.getvalue()
+                await mcmotd.finish(MessageSegment.image(img_bytes))
+            else:
+                await mcmotd.finish("查询失败，未能生成状态图片。")
+                
+        except FinishedException:
+            raise
+        except Exception as e:
+            await mcmotd.finish(f"发生错误: {str(e)}")
+            
+    else:
+        # All servers query
+        await mcmotd.send("正在查询服务器状态，请稍候...")
+        
+        try:
+            image = await asyncio.to_thread(generate_mcmotd_image, plugin_config)
+            
+            if image:
+                img_byte_arr = io.BytesIO()
+                image.save(img_byte_arr, format='PNG')
+                img_bytes = img_byte_arr.getvalue()
+                await mcmotd.finish(MessageSegment.image(img_bytes))
+            else:
+                await mcmotd.finish("查询失败，未能生成状态图片。")
+                
+        except FinishedException:
+            raise
+        except Exception as e:
+            await mcmotd.finish(f"发生错误: {str(e)}")
+
+# List command
+cmd_list = on_command("查服列表", priority=5, block=True)
+
+@cmd_list.handle()
+async def handle_list():
+    msg = "已保存的服务器列表：\n"
+    for server in plugin_config.mcmotd_server_list:
+        alias_str = f" (别名: {server.alias})" if server.alias else ""
+        msg += f"- {server.address}{alias_str}\n"
+    await cmd_list.finish(msg.strip())
