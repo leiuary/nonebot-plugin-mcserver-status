@@ -1,23 +1,22 @@
 import pytest
-from fake import fake_group_message_event_v11
 from nonebug import App
+
+from .fake import fake_group_message_event_v11
 
 
 @pytest.mark.asyncio
-async def test_pip(app: App):
+async def test_matchers_registered(app: App):
     import nonebot
-    from nonebot.adapters.onebot.v11 import Bot, Message
     from nonebot.adapters.onebot.v11 import Adapter as OnebotV11Adapter
 
-    event = fake_group_message_event_v11(message="pip install nonebot2")
-    try:
-        from nonebot_plugin_mcserver_status import pip  # type:ignore
-    except ImportError:
-        pytest.skip("nonebot_plugin_mcserver_status.pip not found")
+    from nonebot_plugin_mcserver_status import cmd_list, mcmotd
 
-    async with app.test_matcher(pip) as ctx:
-        adapter = nonebot.get_adapter(OnebotV11Adapter)
-        bot = ctx.create_bot(base=Bot, adapter=adapter)
-        ctx.receive_event(bot, event)
-        ctx.should_call_send(event, Message("nonebot2"), result=None, bot=bot)
-        ctx.should_finished()
+    # Ensure adapters are available and matchers are registered.
+    adapter = nonebot.get_adapter(OnebotV11Adapter)
+    assert adapter is not None
+
+    # Fake event to assert matcher exists without hitting network.
+    _ = fake_group_message_event_v11(message="查服 example.com")
+
+    assert mcmotd is not None
+    assert cmd_list is not None

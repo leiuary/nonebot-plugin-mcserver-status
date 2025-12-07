@@ -76,7 +76,7 @@ jobs:
         run: uv sync --locked
 
       - name: Run Pytest
-        run: uv run poe test
+        run: uv run pytest
 
       - name: Upload test results to Codecov
         if: ${{ !cancelled() }}
