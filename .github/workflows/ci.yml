@@ -60,7 +60,6 @@ jobs:
     env:
       # OS: ${{ matrix.os }}
       PYTHON: ${{ matrix.python-version }}
-      UV_NO_SYNC: 1
 
     steps:
       - uses: actions/checkout@v6
@@ -76,7 +75,7 @@ jobs:
         run: uv sync --locked
 
       - name: Run Pytest
-        run: uv run pytest
+        run: uv run --with test pytest tests/ -q --tb=short
 
       - name: Upload test results to Codecov
         if: ${{ !cancelled() }}
