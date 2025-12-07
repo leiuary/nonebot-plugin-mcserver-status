@@ -1,11 +1,14 @@
-from nonebot import on_command, get_plugin_config
-from nonebot.plugin import PluginMetadata
-from nonebot.adapters.onebot.v11 import MessageSegment
-from nonebot.exception import FinishedException
-from nonebot.params import CommandArg
-from nonebot.adapters import Message
+from __future__ import annotations
+
 import asyncio
 import io
+from typing import Annotated, Set
+
+from nonebot import get_plugin_config, on_command
+from nonebot.adapters.onebot.v11 import Message, MessageSegment
+from nonebot.exception import FinishedException
+from nonebot.params import CommandArg
+from nonebot.plugin import Matcher, PluginMetadata
 
 from .config import Config
 from .checker import generate_mcmotd_image, generate_single_server_image
@@ -13,9 +16,11 @@ from .checker import generate_mcmotd_image, generate_single_server_image
 __plugin_meta__ = PluginMetadata(
     name="Minecraft Server Status",
     description="一款原版风格、美观高效的 Minecraft 服务器状态查询插件",
-    usage="指令: " \
-    "查服" \
-    "查服 [IP/别名]",
+    usage="\n".join([
+        "指令:",
+        "查服",
+        "查服 [IP/别名]",
+    ]),
     type="application",
     homepage="https://github.com/leiuary/nonebot-plugin-mcserver-status",
     supported_adapters={"nonebot.adapters.onebot.v11"},
@@ -28,13 +33,13 @@ plugin_config = get_plugin_config(Config)
 # Determine command name and aliases
 triggers = plugin_config.mcmotd_command_triggers
 cmd_name = triggers[0] if triggers else "查服"
-cmd_aliases = set(triggers[1:]) if len(triggers) > 1 else set()
+cmd_aliases: Set[str | tuple[str, ...]] = set(triggers[1:]) if len(triggers) > 1 else set()
 
 # Define command
-mcmotd = on_command(cmd_name, aliases=cmd_aliases, priority=5, block=True)
+mcmotd: Matcher = on_command(cmd_name, aliases=cmd_aliases, priority=5, block=True)
 
 @mcmotd.handle()
-async def handle_mcmotd(args: Message = CommandArg()):
+async def handle_mcmotd(args: Annotated[Message, CommandArg()]):
     arg_text = args.extract_plain_text().strip()
     
     if arg_text:

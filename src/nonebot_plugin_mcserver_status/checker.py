@@ -1,13 +1,19 @@
+from __future__ import annotations
+
+import concurrent.futures
+import json
 import socket
 import struct
-import json
 import time
-import concurrent.futures
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, Optional
+
 from PIL import Image, ImageDraw, ImageFont
 from mcstatus import JavaServer
-from .mc_renderer import generate_server_card, calculate_required_width, parse_inner_legacy
+
 from .config import Config
+from .mc_renderer import calculate_required_width, generate_server_card, parse_inner_legacy
 
 # Image Settings
 TITLE_TEXT = "Minecraft Server Status"
@@ -97,32 +103,36 @@ class MixedStatus:
     结合了原始 JSON 数据和 mcstatus 延迟的混合状态对象。
     模仿渲染器预期的结构。
     """
-    def __init__(self, raw_json, mcstatus_latency, fail_count=0):
+    @dataclass
+    class Players:
+        online: int
+        max: int
+        sample: list[dict[str, Any]]
+
+    def __init__(self, raw_json: dict[str, Any], mcstatus_latency: float, fail_count: int = 0):
         self.raw = raw_json
         self.latency = mcstatus_latency
         self.fail_count = fail_count
         self.favicon = raw_json.get("favicon")
         p = raw_json.get("players", {})
-        self.players = type('P',(),{})()
-        self.players.online = p.get("online", 0)
-        self.players.max = p.get("max", 0)
-        self.players.sample = p.get("sample", [])
+        self.players = self.Players(
+            online=p.get("online", 0),
+            max=p.get("max", 0),
+            sample=p.get("sample", []),
+        )
 
 class OfflineStatus:
     """
     表示服务器连接失败。
     """
-    def __init__(self, error_msg):
+    def __init__(self, error_msg: str):
         self.raw = {
             "description": {"text": f"§c无法连接到服务器\n§7{error_msg}"},
             "players": {"online": 0, "max": 0},
             "favicon": None, "version": {"name": "Unknown"}
         }
         self.latency = -1
-        self.players = type('P',(),{})()
-        self.players.online = 0
-        self.players.max = 0
-        self.players.sample = []
+        self.players = MixedStatus.Players(online=0, max=0, sample=[])
 
 
 # --- 核心逻辑 ---
@@ -255,7 +265,7 @@ def query_one_server(index, address, config: Config):
             "status_obj": offline_obj
         }
 
-def create_summary_image(combined_rows, config: Config):
+def create_summary_image(combined_rows, config: Config) -> Optional[Image.Image]:
     """
     将单独的服务器行合并为带有标题和页脚的单个汇总图像。
     """
@@ -305,7 +315,7 @@ def create_summary_image(combined_rows, config: Config):
     
     return summary_img
 
-def generate_mcmotd_image(config: Config) -> Image.Image:
+def generate_mcmotd_image(config: Config) -> Optional[Image.Image]:
     print(f"🚀 开始并行查询 {len(config.mcmotd_server_list)} 个服务器...")
     
     font_path = get_font_path(config)
@@ -448,7 +458,7 @@ def render_player_list(players, width, font_path):
         
     return img
 
-def generate_single_server_image(address: str, config: Config) -> Image.Image:
+def generate_single_server_image(address: str, config: Config) -> Optional[Image.Image]:
     font_path = get_font_path(config)
     
     # 查找别名
