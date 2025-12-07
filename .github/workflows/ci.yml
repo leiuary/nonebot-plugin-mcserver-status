@@ -72,10 +72,10 @@ jobs:
           version: "latest"
 
       - name: Install Dependencies
-        run: uv sync --locked
+        run: uv sync --locked --all-extras
 
       - name: Run Pytest
-        run: uv run --with test pytest tests/ -q --tb=short
+        run: uv run pytest tests/ -q --tb=short
 
       - name: Upload test results to Codecov
         if: ${{ !cancelled() }}
